@@ -1,0 +1,415 @@
+
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="NOVA YouTube: busca y reproduce vídeos.">
+<title>NOVA YouTube</title>
+
+<style>
+*{box-sizing:border-box}
+
+body{
+ margin:0;
+ background:#eee;
+ color:#222;
+ font-family:Arial,sans-serif;
+ font-size:15px;
+}
+
+header{
+ background:#b90000;
+ color:white;
+ padding:13px;
+}
+
+.logo{font-size:25px;font-weight:bold}
+.logo span{color:#ffdada}
+.subtitle{font-size:12px;margin-top:4px}
+
+main{
+ max-width:850px;
+ margin:auto;
+ background:white;
+ min-height:100vh;
+}
+
+.search{
+ padding:12px;
+ border-bottom:1px solid #ddd;
+}
+
+#query{
+ width:72%;
+ padding:11px 8px;
+ font-size:16px;
+ border:1px solid #aaa;
+}
+
+button{
+ background:#b90000;
+ color:white;
+ border:0;
+ padding:11px 13px;
+ font-size:14px;
+ cursor:pointer;
+}
+
+nav{
+ background:#292929;
+ padding:11px;
+}
+
+nav a{
+ color:white;
+ text-decoration:none;
+ margin-right:16px;
+ font-size:13px;
+}
+
+.content{padding:12px}
+
+h1{font-size:20px}
+h2{font-size:18px}
+
+#status{
+ color:#666;
+ font-size:13px;
+ margin:12px 0;
+}
+
+.video{
+ display:block;
+ overflow:hidden;
+ padding:11px 0;
+ border-bottom:1px solid #ddd;
+ color:#222;
+ text-decoration:none;
+}
+
+.thumbnail{
+ float:left;
+ width:130px;
+ height:74px;
+ object-fit:cover;
+ background:#ddd;
+ margin-right:11px;
+}
+
+.video-title{
+ color:#a00000;
+ font-weight:bold;
+ font-size:15px;
+}
+
+.video-meta{
+ color:#777;
+ font-size:12px;
+ margin-top:6px;
+}
+
+.player{
+ background:#111;
+ padding:5px;
+ margin:12px 0;
+}
+
+.player iframe{
+ display:block;
+ width:100%;
+ height:315px;
+ border:0;
+}
+
+.hidden{display:none}
+
+.notice{
+ background:#fff4cc;
+ border:1px solid #e8d58d;
+ padding:10px;
+ font-size:12px;
+ line-height:1.5;
+ margin-top:20px;
+}
+
+footer{
+ background:#292929;
+ color:#ccc;
+ text-align:center;
+ padding:15px;
+ font-size:12px;
+}
+
+@media(max-width:480px){
+ #query{width:65%}
+ .thumbnail{width:105px;height:60px}
+ .player iframe{height:220px}
+ .content{padding:9px}
+}
+</style>
+</head>
+
+<body>
+<main>
+
+<header>
+ <div class="logo">NOVA <span>YouTube</span></div>
+ <div class="subtitle">Tu mundo de vídeos</div>
+</header>
+
+<div class="search">
+ <form id="searchForm">
+  <input id="query" type="text" placeholder="Buscar vídeos..." required>
+  <button type="submit">Buscar</button>
+ </form>
+</div>
+
+<nav>
+ <a href="#" id="home">Inicio</a>
+ <a href="#" id="trending">Tendencias</a>
+ <a href="#" id="history">Historial</a>
+</nav>
+
+<div class="content">
+
+ <section id="playerSection" class="hidden">
+  <h1 id="playingTitle"></h1>
+  <div class="player" id="player"></div>
+  <button id="backButton">Volver a resultados</button>
+ </section>
+
+ <section id="resultsSection">
+  <h1 id="heading">Bienvenido a NOVA</h1>
+  <div id="status">Busca cualquier vídeo de YouTube.</div>
+  <div id="results"></div>
+ </section>
+
+ <div class="notice">
+  NOVA utiliza la API oficial de YouTube para buscar vídeos y el reproductor
+  integrado oficial para reproducirlos. Algunos vídeos pueden no permitir
+  reproducción integrada. La compatibilidad con Opera Mini antiguo no está
+  garantizada.
+ </div>
+
+</div>
+
+<footer>
+ NOVA YouTube · Proyecto independiente · No oficial de YouTube
+</footer>
+
+</main>
+
+<script>
+var results = document.getElementById("results");
+var statusBox = document.getElementById("status");
+var heading = document.getElementById("heading");
+var playerSection = document.getElementById("playerSection");
+var resultsSection = document.getElementById("resultsSection");
+var lastResults = [];
+
+function showStatus(message){
+ statusBox.innerHTML = "";
+ statusBox.appendChild(document.createTextNode(message));
+}
+
+function saveHistory(query){
+ try{
+  var history = JSON.parse(localStorage.getItem("nova_history") || "[]");
+  var updated = [query];
+
+  for(var i=0;i<history.length;i++){
+   if(history[i].toLowerCase() !== query.toLowerCase()){
+    updated.push(history[i]);
+   }
+  }
+
+  if(updated.length>15) updated.length=15;
+  localStorage.setItem("nova_history",JSON.stringify(updated));
+ }catch(e){}
+}
+
+function createResult(video){
+ var link = document.createElement("a");
+ link.className = "video";
+ link.href = "#";
+
+ var image = document.createElement("img");
+ image.className = "thumbnail";
+ image.src = video.thumbnail || "";
+ image.alt = "Miniatura";
+
+ var title = document.createElement("div");
+ title.className = "video-title";
+ title.textContent = video.title || "Vídeo";
+
+ var meta = document.createElement("div");
+ meta.className = "video-meta";
+ meta.textContent = video.channel || "YouTube";
+
+ link.appendChild(image);
+ link.appendChild(title);
+ link.appendChild(meta);
+
+ link.onclick = function(e){
+  if(e) e.preventDefault();
+  playVideo(video);
+  return false;
+ };
+
+ return link;
+}
+
+function displayResults(items){
+ results.innerHTML = "";
+ lastResults = items || [];
+
+ if(lastResults.length===0){
+  showStatus("No se encontraron vídeos.");
+  return;
+ }
+
+ showStatus("Se encontraron "+lastResults.length+" vídeos.");
+
+ for(var i=0;i<lastResults.length;i++){
+  results.appendChild(createResult(lastResults[i]));
+ }
+}
+
+function searchVideos(query){
+ query = query.replace(/^\s+|\s+$/g,"");
+ if(!query)return;
+
+ document.getElementById("query").value = query;
+
+ heading.textContent = "Resultados de búsqueda";
+ playerSection.className = "hidden";
+ resultsSection.className = "";
+
+ results.innerHTML = "";
+ showStatus("Buscando vídeos...");
+
+ saveHistory(query);
+
+ var xhr = new XMLHttpRequest();
+
+ xhr.open("GET","/api/search?q="+encodeURIComponent(query),true);
+
+ xhr.onreadystatechange = function(){
+  if(xhr.readyState!==4)return;
+
+  if(xhr.status>=200 && xhr.status<300){
+   try{
+    var data = JSON.parse(xhr.responseText);
+    displayResults(data.items);
+   }catch(e){
+    showStatus("Error leyendo los resultados.");
+   }
+  }else{
+   var message = "No se pudo realizar la búsqueda.";
+
+   try{
+    var error = JSON.parse(xhr.responseText);
+    if(error.error) message=error.error;
+   }catch(e){}
+
+   showStatus(message);
+  }
+ };
+
+ xhr.send(null);
+}
+
+function playVideo(video){
+ if(!video.videoId)return;
+
+ document.getElementById("playingTitle").textContent = video.title;
+
+ var player = document.getElementById("player");
+ player.innerHTML = "";
+
+ var iframe = document.createElement("iframe");
+
+ iframe.src = "https://www.youtube.com/embed/" +
+              encodeURIComponent(video.videoId);
+
+ iframe.setAttribute("allowfullscreen","allowfullscreen");
+ iframe.setAttribute("title","Reproductor NOVA YouTube");
+ iframe.setAttribute("allow","accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture");
+
+ player.appendChild(iframe);
+
+ resultsSection.className = "hidden";
+ playerSection.className = "";
+}
+
+document.getElementById("searchForm").onsubmit = function(e){
+ if(e)e.preventDefault();
+ searchVideos(document.getElementById("query").value);
+ return false;
+};
+
+document.getElementById("backButton").onclick = function(){
+ playerSection.className = "hidden";
+ resultsSection.className = "";
+ displayResults(lastResults);
+};
+
+document.getElementById("home").onclick = function(e){
+ if(e)e.preventDefault();
+
+ playerSection.className = "hidden";
+ resultsSection.className = "";
+ heading.textContent = "Bienvenido a NOVA";
+ results.innerHTML = "";
+ showStatus("Busca cualquier vídeo de YouTube.");
+};
+
+document.getElementById("trending").onclick = function(e){
+ if(e)e.preventDefault();
+ searchVideos("vídeos populares");
+};
+
+document.getElementById("history").onclick = function(e){
+ if(e)e.preventDefault();
+
+ var history = [];
+
+ try{
+  history = JSON.parse(localStorage.getItem("nova_history") || "[]");
+ }catch(err){}
+
+ playerSection.className = "hidden";
+ resultsSection.className = "";
+ results.innerHTML = "";
+ heading.textContent = "Historial de búsquedas";
+
+ if(history.length===0){
+  showStatus("Todavía no hay búsquedas.");
+  return;
+ }
+
+ showStatus("Pulsa una búsqueda para repetirla.");
+
+ for(var i=0;i<history.length;i++){
+  (function(query){
+   var link = document.createElement("a");
+   link.className = "video";
+   link.href = "#";
+   link.textContent = query;
+
+   link.onclick = function(ev){
+    if(ev)ev.preventDefault();
+    searchVideos(query);
+    return false;
+   };
+
+   results.appendChild(link);
+  })(history[i]);
+ }
+};
+</script>
+
+</body>
+</html>

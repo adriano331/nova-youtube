@@ -1,0 +1,14 @@
+
+{
+  "name": "nova-youtube",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NOVA YouTube para móviles antiguos",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
